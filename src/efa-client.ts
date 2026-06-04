@@ -23,7 +23,6 @@ export class EfaClient {
       locationServerActive: '1',
       type_sf: 'any',
       name_sf: query,
-      anyObjFilter_sf: '2',
       coordOutputFormat: 'WGS84[DD.DDDDD]',
       outputFormat: 'JSON',
     });
@@ -74,15 +73,17 @@ export class EfaClient {
   async tripRequest(
     origin: string,
     destination: string,
+    originType: 'stop' | 'address' = 'stop',
+    destinationType: 'stop' | 'address' = 'stop',
     time?: string,
     date?: string,
     arrival: boolean = false,
   ): Promise<unknown> {
     const params: Record<string, string> = {
       language: 'de',
-      type_origin: 'stop',
+      type_origin: originType,
       name_origin: origin,
-      type_destination: 'stop',
+      type_destination: destinationType,
       name_destination: destination,
       useRealtime: '1',
       coordOutputFormat: 'WGS84[DD.DDDDD]',

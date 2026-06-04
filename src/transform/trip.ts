@@ -95,7 +95,7 @@ export function transformTripRequest(data: unknown): TripResponse {
 
   const firstTrip = resp.trips[0];
   const legs: TripLeg[] = [];
-  let transfers = 0;
+  let rideCount = 0;
 
   const rawLegs = firstTrip.legs;
   if (!Array.isArray(rawLegs)) {
@@ -119,7 +119,7 @@ export function transformTripRequest(data: unknown): TripResponse {
         destination: toStop(arr),
       });
     } else if (mode) {
-      transfers++;
+      rideCount++;
 
       const intermediateStops: TripLeg['intermediateStops'] = [];
       let allStops: TripStop[] = [];
@@ -152,6 +152,7 @@ export function transformTripRequest(data: unknown): TripResponse {
 
   const durationParts = (firstTrip.duration || '00:00').split(':');
   const duration = parseInt(durationParts[0], 10) * 60 + parseInt(durationParts[1], 10) || 0;
+  const transfers = Math.max(0, rideCount - 1);
 
   return { legs, duration, transfers };
 }

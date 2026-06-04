@@ -5,7 +5,7 @@ import { transformStopFinder } from './transform/stops';
 import { transformDepartureMonitor } from './transform/departures';
 import { transformTripRequest } from './transform/trip';
 import { getFromCache, setInCache, getCacheKey, DEFAULT_TTL } from './cache';
-import { TripRequest } from './types';
+import { TripRequest, StopLocation } from './types';
 
 const app = express();
 const efa = new EfaClient();
@@ -88,15 +88,39 @@ app.post('/api/trip', asyncHandler(async (req, res) => {
       return;
     }
 
-    const cacheKey = getCacheKey('trip', `${body.origin}:${body.destination}:${body.time || ''}:${body.date || ''}:${body.arrival || false}`);
-    const cached = getFromCache(cacheKey);
-    if (cached) { res.json(cached); return; }
+    let originId = body.origin;
+    let destId = body.destination;
+    let originType = body.originType || 'stop';
+    let destType = body.destinationType || 'stop';
+    let addrOrigin: StopLocation | undefined;
+    let addrDest: StopLocation | undefined;
 
-    const raw = await efa.tripRequest(body.origin, body.destination, body.time, body.date, body.arrival);
+        if (originType !== 'stop') {
+            const sfRaw = await efa.stopFinder(body.origin);
+            const sfStops = transformStopFinder(sfRaw);
+            const stop = sfStops.find(s => s.type === 'stop');
+            const addr = sfStops.find(s => s.type !== 'stop');
+            if (stop) { originId = stop.id; originType = 'stop'; }
+            if (addr) addrOrigin = addr;
+        }
+        if (destType !== 'stop') {
+            const sfRaw = await efa.stopFinder(body.destination);
+            const sfStops = transformStopFinder(sfRaw);
+            const stop = sfStops.find(s => s.type === 'stop');
+            const addr = sfStops.find(s => s.type !== 'stop');
+            if (stop) { destId = stop.id; destType = 'stop'; }
+            if (addr) addrDest = addr;
+        }
+
+    const cacheKey = getCacheKey('trip', `${originId}:${destId}:${body.time || ''}:${body.date || ''}:${body.arrival || false}`);
+    const cached = getFromCache(cacheKey);
+    if (cached) { res.json({ ...cached, addrOrigin, addrDest }); return; }
+
+    const raw = await efa.tripRequest(originId, destId, originType, destType, body.time, body.date, body.arrival);
     const result = transformTripRequest(raw);
 
     setInCache(cacheKey, result, DEFAULT_TTL.trips);
-    res.json(result);
+    res.json({ ...result, addrOrigin, addrDest });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error';
     res.status(500).json({ error: 'TRIP_REQUEST_ERROR', message });

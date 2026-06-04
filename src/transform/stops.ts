@@ -46,13 +46,19 @@ export function transformStopFinder(data: unknown): StopLocation[] {
 
   return points.map((p: StopFinderPoint) => {
     const coords = (p.ref?.coords || '0,0').split(',').map(Number);
+    const anyType = p.anyType || 'stop';
+    let type: StopLocation['type'] = 'stop';
+    if (anyType === 'poi') type = 'poi';
+    else if (anyType === 'address' || anyType === 'singlehouse' || anyType === 'street') type = 'address';
     return {
       id: p.ref?.id || p.stateless || '',
       gid: p.ref?.gid || '',
       name: p.name || p.object || '',
       lat: coords[1] || 0,
       lon: coords[0] || 0,
-      type: (p.anyType === 'poi' ? 'poi' : p.anyType === 'address' ? 'address' : 'stop') as StopLocation['type'],
+      type,
+      stateless: p.stateless || undefined,
+      efaType: anyType,
     };
   });
 }

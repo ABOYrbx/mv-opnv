@@ -5,6 +5,8 @@ export interface StopLocation {
   lat: number;
   lon: number;
   type: 'stop' | 'poi' | 'address';
+  stateless?: string;
+  efaType?: string;
 }
 
 export interface TransportType {
@@ -67,6 +69,8 @@ export interface TripResponse {
 export interface TripRequest {
   origin: string;
   destination: string;
+  originType?: 'stop' | 'address';
+  destinationType?: 'stop' | 'address';
   time?: string;
   date?: string;
   arrival?: boolean;
