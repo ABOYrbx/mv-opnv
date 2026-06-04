@@ -1,13 +1,9 @@
 package com.opnv.app
 
 import android.annotation.SuppressLint
-import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.ViewGroup
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceError
-import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.enableEdgeToEdge
@@ -20,7 +16,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var swipeRefresh: SwipeRefreshLayout
 
     companion object {
-        private const val DEFAULT_URL = "http://10.0.2.2:3000"
+        private const val API_BASE_URL = "http://10.0.2.2:3000"
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -51,39 +47,15 @@ class MainActivity : AppCompatActivity() {
             }
 
             webViewClient = object : WebViewClient() {
-                override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                    super.onPageStarted(view, url, favicon)
-                    swipeRefresh.isRefreshing = true
-                }
-
                 override fun onPageFinished(view: WebView?, url: String?) {
                     super.onPageFinished(view, url)
                     swipeRefresh.isRefreshing = false
-                }
-
-                override fun onReceivedError(
-                    view: WebView?,
-                    request: WebResourceRequest?,
-                    error: WebResourceError?
-                ) {
-                    swipeRefresh.isRefreshing = false
-                }
-
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?,
-                    request: WebResourceRequest?
-                ): Boolean {
-                    return false
+                    val apiUrl = intent.getStringExtra("api_url") ?: API_BASE_URL
+                    evaluateJavascript("window.API_BASE_URL='$apiUrl'", null)
                 }
             }
 
-            webChromeClient = object : WebChromeClient() {
-                override fun onReceivedTitle(view: WebView?, title: String?) {
-                    supportActionBar?.title = title
-                }
-            }
-
-            loadUrl(getUrl())
+            loadUrl("file:///android_asset/index.html")
         }
 
         swipeRefresh.setOnRefreshListener {
@@ -107,9 +79,5 @@ class MainActivity : AppCompatActivity() {
     override fun onRestoreInstanceState(savedInstanceState: Bundle) {
         super.onRestoreInstanceState(savedInstanceState)
         webView.restoreState(savedInstanceState)
-    }
-
-    private fun getUrl(): String {
-        return intent.getStringExtra("url") ?: DEFAULT_URL
     }
 }
