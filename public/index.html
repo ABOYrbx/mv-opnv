@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>ÖPNV MV</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg-card: #161b22;
+  --bg-elevated: #1c2333;
+  --bg-hover: #21262d;
+  --text: #f0f6fc;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --accent: #00b4d8;
+  --accent-hover: #48cae4;
+  --accent-dim: rgba(0,180,216,.15);
+  --danger: #e94560;
+  --success: #2ea043;
+  --warning: #d29922;
+  --border: #30363d;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,.4);
+  --font: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen,Ubuntu,Cantarell,sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh;padding-bottom:env(safe-area-inset-bottom)}
+input,button,select{font:inherit;color:inherit}
+a{color:var(--accent);text-decoration:none}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::selection{background:var(--accent-dim)}
+
+/* Header */
+header{position:sticky;top:0;z-index:100;background:var(--bg-card);border-bottom:1px solid var(--border);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.header-inner{display:flex;align-items:center;gap:16px;max-width:800px;margin:0 auto;padding:8px 16px}
+.brand{font-size:1.25rem;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+.brand span{color:var(--accent)}
+.tabs{display:flex;gap:4px;flex:1;justify-content:flex-end}
+.tab{background:none;border:none;padding:8px 12px;border-radius:var(--radius-sm);font-size:.85rem;font-weight:500;color:var(--text-secondary);cursor:pointer;transition:all .2s;white-space:nowrap}
+.tab:hover{color:var(--text);background:var(--bg-hover)}
+.tab.active{color:var(--accent);background:var(--accent-dim)}
+.tab .icon{display:inline-block;margin-right:4px}
+
+/* Main */
+main{max-width:800px;margin:0 auto;padding:16px}
+.tab-content{display:none}
+.tab-content.active{display:block;animation:fadeIn .2s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Back button */
+.back-btn{background:none;border:none;color:var(--text-secondary);font-size:.9rem;cursor:pointer;padding:8px 0;margin-bottom:12px;display:inline-flex;align-items:center;gap:4px;transition:color .15s}
+.back-btn:hover{color:var(--text)}
+.back-btn::before{content:"←";font-size:1.1em}
+
+/* Search */
+.search-box{position:relative;margin-bottom:16px}
+.search-box input{width:100%;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);font-size:1rem;color:var(--text);outline:none;transition:border .2s,box-shadow .2s}
+.search-box input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.search-box input::placeholder{color:var(--text-muted)}
+
+/* Cards */
+.card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:8px;cursor:pointer;transition:all .15s;position:relative}
+.card:hover{background:var(--bg-elevated);border-color:var(--text-muted);transform:translateY(-1px);box-shadow:var(--shadow-lg)}
+.card:active{transform:translateY(0)}
+.card h3{font-size:1rem;font-weight:600;margin-bottom:2px}
+.card .sub{font-size:.82rem;color:var(--text-secondary)}
+.card .badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.75rem;font-weight:600;background:var(--accent-dim);color:var(--accent);margin-top:4px}
+.card .badge.warn{background:rgba(210,153,34,.15);color:var(--warning)}
+.card .badge.danger{background:rgba(233,69,96,.15);color:var(--danger)}
+.card .badge.success{background:rgba(46,160,67,.15);color:var(--success)}
+
+/* Departures */
+.dep-header{margin-bottom:16px}
+.dep-header h2{font-size:1.2rem;font-weight:600}
+.dep-header .sub{color:var(--text-secondary);font-size:.85rem}
+.dep-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:6px;display:flex;align-items:center;gap:12px;transition:all .15s}
+.dep-card:hover{background:var(--bg-elevated)}
+.dep-card .line{display:inline-flex;align-items:center;justify-content:center;min-width:44px;height:32px;padding:0 10px;border-radius:6px;font-size:.85rem;font-weight:700;background:var(--accent-dim);color:var(--accent);flex-shrink:0}
+.dep-card .line.bus{background:rgba(233,69,96,.12);color:var(--danger)}
+.dep-card .line.sbahn{background:rgba(0,180,216,.15);color:var(--accent)}
+.dep-card .line.strassenbahn{background:rgba(210,153,34,.15);color:var(--warning)}
+.dep-card .info{flex:1;min-width:0}
+.dep-card .info .direction{font-size:.9rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dep-card .info .meta{font-size:.78rem;color:var(--text-secondary);margin-top:1px}
+.dep-card .time{text-align:right;flex-shrink:0}
+.dep-card .time .planned{font-size:.78rem;color:var(--text-muted);text-decoration:line-through}
+.dep-card .time .realtime{font-size:1rem;font-weight:600}
+.dep-card .time .ontime{font-size:1rem;font-weight:600}
+.dep-card .delay{display:inline-flex;align-items:center;justify-content:center;min-width:28px;height:20px;border-radius:4px;font-size:.72rem;font-weight:700;padding:0 6px}
+.delay.on-time{background:rgba(46,160,67,.15);color:var(--success)}
+.delay.late{background:rgba(210,153,34,.15);color:var(--warning)}
+.delay.very-late{background:rgba(233,69,96,.15);color:var(--danger)}
+
+/* Trip Form */
+.trip-form{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+.trip-form .input-group{position:relative}
+.trip-form input[type="text"],.trip-form input[type="date"],.trip-form input[type="time"]{width:100%;padding:12px 16px;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);font-size:1rem;color:var(--text);outline:none;transition:border .2s,box-shadow .2s}
+.trip-form input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-dim)}
+.trip-form input::placeholder{color:var(--text-muted)}
+.trip-form .row{display:flex;gap:10px}
+.trip-form .row input{flex:1}
+.trip-form button[type="submit"]{padding:14px;background:var(--accent);color:#0d1117;border:none;border-radius:var(--radius);font-size:1rem;font-weight:700;cursor:pointer;transition:all .15s}
+.trip-form button[type="submit"]:hover{background:var(--accent-hover)}
+.trip-form button[type="submit"]:disabled{opacity:.5;cursor:not-allowed}
+
+/* Suggestions dropdown */
+.suggestions{position:absolute;top:100%;left:0;right:0;z-index:50;background:var(--bg-elevated);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius) var(--radius);max-height:200px;overflow-y:auto;display:none;box-shadow:var(--shadow-lg)}
+.suggestions.show{display:block}
+.suggestions .suggestion{padding:10px 16px;cursor:pointer;font-size:.9rem;border-bottom:1px solid var(--border);transition:background .1s}
+.suggestions .suggestion:last-child{border-bottom:none}
+.suggestions .suggestion:hover{background:var(--bg-hover)}
+.suggestions .suggestion .sub{font-size:.78rem;color:var(--text-secondary)}
+
+/* Trip results */
+.trip-result{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.trip-result:not(:first-child){margin-top:16px}
+.trip-summary{display:flex;align-items:center;gap:16px;margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--border)}
+.trip-summary .stat{text-align:center}
+.trip-summary .stat .val{font-size:1.2rem;font-weight:700;color:var(--accent)}
+.trip-summary .stat .lbl{font-size:.72rem;color:var(--text-secondary);text-transform:uppercase;letter-spacing:.05em}
+.trip-leg{padding:8px 0;display:flex;align-items:flex-start;gap:12px;position:relative}
+.trip-leg::before{content:"";position:absolute;left:17px;top:36px;bottom:-8px;width:2px;background:var(--border)}
+.trip-leg:last-child::before{display:none}
+.trip-leg .dot{width:10px;height:10px;border-radius:50%;margin-top:5px;flex-shrink:0;position:relative;z-index:1}
+.trip-leg .dot.ride{background:var(--accent)}
+.trip-leg .dot.footpath{background:var(--text-muted)}
+.trip-leg .leg-info{flex:1;min-width:0}
+.trip-leg .leg-info .leg-line{font-weight:600;font-size:.9rem}
+.trip-leg .leg-info .leg-direction{font-size:.82rem;color:var(--text-secondary)}
+.trip-leg .leg-info .leg-times{font-size:.78rem;color:var(--text-muted);margin-top:2px}
+.trip-leg .leg-info .leg-stops{font-size:.78rem;color:var(--text-secondary);margin-top:2px}
+
+/* Loading spinner */
+.loading{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(13,17,23,.7);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:999;transition:opacity .2s}
+.loading.hidden{opacity:0;pointer-events:none}
+.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Empty state */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text-muted)}
+.empty-state .icon{font-size:3rem;margin-bottom:12px;display:block}
+.empty-state p{font-size:.9rem}
+
+/* Error state */
+.error-state{text-align:center;padding:40px 20px}
+.error-state .msg{color:var(--danger);font-size:.9rem;margin-bottom:12px}
+.error-state button{background:var(--bg-card);border:1px solid var(--border);padding:8px 20px;border-radius:var(--radius-sm);cursor:pointer;transition:all .15s;color:var(--text)}
+.error-state button:hover{background:var(--bg-hover)}
+
+/* Section label */
+.section-label{font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted);margin:20px 0 8px;padding:0 4px}
+
+/* Auto-refresh hint */
+.refresh-hint{text-align:center;font-size:.72rem;color:var(--text-muted);padding:8px 0;opacity:.7}
+
+/* Trip detail expandable */
+.trip-result{cursor:pointer;transition:all .15s}
+.trip-result.open,.trip-result:hover{background:var(--bg-elevated)}
+.trip-result .trip-leg{pointer-events:none}
+.trip-detail{pointer-events:auto;margin-top:12px;padding-top:12px;border-top:1px solid var(--border);animation:slideDown .2s ease}
+.trip-detail.hidden{display:none}
+@keyframes slideDown{from{opacity:0;max-height:0}to{opacity:1;max-height:500px}}
+
+.detail-stops{padding:0 4px;margin-bottom:12px}
+.detail-label{font-size:.72rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:8px}
+.detail-stop{display:flex;align-items:center;gap:8px;padding:4px 0;font-size:.82rem;color:var(--text-secondary)}
+.detail-stop .time{color:var(--text);font-weight:500;min-width:36px}
+.detail-stop .plat{color:var(--text-muted);font-size:.75rem}
+.detail-stop .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.detail-stop .dot.pass{background:var(--accent)}
+.detail-stop .dot.dep{background:var(--success)}
+.detail-stop .dot.arr{background:var(--danger)}
+
+.map-wrap{border-radius:var(--radius-sm);overflow:hidden;border:1px solid var(--border);margin-top:8px}
+.map-wrap .leaflet-container{background:#1a1a2e;color:var(--text)}
+.leaflet-popup-content-wrapper{background:var(--bg-card);color:var(--text);border-radius:var(--radius-sm)}
+.leaflet-popup-tip{background:var(--bg-card)}
+
+/* Responsive */
+@media(min-width:768px){
+  .header-inner{padding:12px 24px}
+  .brand{font-size:1.4rem}
+  .tab{padding:10px 20px;font-size:.9rem}
+  main{padding:24px}
+  .dep-card{padding:16px 20px}
+}
+</style>
+</head>
+<body>
+
+<header>
+<div class="header-inner">
+  <div class="brand">ÖPNV<span>MV</span></div>
+  <nav class="tabs">
+    <button class="tab active" data-tab="stops"><span class="icon">🅿</span>Stops</button>
+    <button class="tab" data-tab="departures"><span class="icon">🚆</span>Dep</button>
+    <button class="tab" data-tab="trip"><span class="icon">🔄</span>Trip</button>
+  </nav>
+</div>
+</header>
+
+<main>
+
+<!-- Stops -->
+<section id="tab-stops" class="tab-content active">
+  <div class="search-box">
+    <input type="text" id="stop-search" placeholder="Haltestelle suchen..." autocomplete="off">
+  </div>
+  <div id="stop-results"></div>
+</section>
+
+<!-- Departures -->
+<section id="tab-departures" class="tab-content">
+  <button class="back-btn" id="back-to-stops">Haltestellen</button>
+  <div id="departures-content"></div>
+  <div class="refresh-hint" id="refresh-hint">Aktualisiert automatisch alle 30s</div>
+</section>
+
+<!-- Trip -->
+<section id="tab-trip" class="tab-content">
+  <form class="trip-form" id="trip-form">
+    <div class="input-group">
+      <input type="text" id="trip-origin" placeholder="Von..." autocomplete="off">
+      <div class="suggestions" id="origin-suggestions"></div>
+    </div>
+    <div class="input-group">
+      <input type="text" id="trip-destination" placeholder="Nach..." autocomplete="off">
+      <div class="suggestions" id="destination-suggestions"></div>
+    </div>
+    <div class="row">
+      <input type="date" id="trip-date">
+      <input type="time" id="trip-time" value="12:00">
+    </div>
+    <button type="submit" id="trip-submit">Verbindung suchen</button>
+  </form>
+  <div id="trip-results"></div>
+</section>
+
+</main>
+
+<div id="loading" class="loading hidden"><div class="spinner"></div></div>
+
+<script>
+const state = {
+  tab: 'stops',
+  selectedStop: null,
+  departuresTimer: null,
+  stopSearchTerm: '',
+  originTerm: '',
+  destTerm: ''
+};
+
+// ---- Helpers ----
+function showLoading() { document.getElementById('loading').classList.remove('hidden') }
+function hideLoading() { document.getElementById('loading').classList.add('hidden') }
+
+function formatTime(isoStr) {
+  if (!isoStr) return null;
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return null;
+    return d.toTimeString().slice(0, 5);
+  } catch { return null }
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return null;
+  const d = isoStr.split('T')[0];
+  if (!d) return null;
+  const parts = d.split('-');
+  if (parts.length !== 3) return null;
+  return `${parts[2]}.${parts[1]}.${parts[0]}`;
+}
+
+function parseDelay(planned, realtime) {
+  if (!planned || !realtime) return { text: '–', cls: 'on-time' };
+  const p = planned.split('T')[1]?.split(':').slice(0,2).join(':');
+  const r = realtime.split('T')[1]?.split(':').slice(0,2).join(':');
+  if (!p || !r) return { text: '–', cls: 'on-time' };
+  const pMin = parseInt(p.split(':')[0],10)*60 + parseInt(p.split(':')[1],10);
+  const rMin = parseInt(r.split(':')[0],10)*60 + parseInt(r.split(':')[1],10);
+  const diff = rMin - pMin;
+  if (diff <= 0) return { text: 'pünktlich', cls: 'on-time' };
+  if (diff <= 5) return { text: `+${diff}`, cls: 'late' };
+  return { text: `+${diff}`, cls: 'very-late' };
+}
+
+function transportClass(name) {
+  const n = (name || '').toLowerCase();
+  if (n.includes('bus')) return 'bus';
+  if (n.includes('s-bahn')) return 'sbahn';
+  if (n.includes('stra\u00dfenbahn') || n.includes('tram')) return 'strassenbahn';
+  return '';
+}
+
+// ---- API ----
+async function api(method, url, body) {
+  const opts = { method, headers: {} };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); msg = j.message || j.error || msg } catch {}
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+// ---- Tabs ----
+document.querySelectorAll('.tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const tab = btn.dataset.tab;
+    switchTab(tab);
+  });
+});
+
+function switchTab(tab) {
+  state.tab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tab-' + tab));
+  if (tab === 'departures' && state.selectedStop) {
+    loadDepartures(state.selectedStop.id);
+  }
+  if (tab === 'departures' && !state.selectedStop) {
+    document.getElementById('departures-content').innerHTML = '<div class="empty-state"><span class="icon">👆</span><p>Wähle eine Haltestelle über "Stops"</p></div>';
+  }
+}
+
+// ---- Stop Search ----
+const stopSearch = document.getElementById('stop-search');
+const stopResults = document.getElementById('stop-results');
+let stopDebounce = null;
+
+stopSearch.addEventListener('input', () => {
+  const q = stopSearch.value.trim();
+  state.stopSearchTerm = q;
+  clearTimeout(stopDebounce);
+  if (q.length < 2) { stopResults.innerHTML = ''; return }
+  stopDebounce = setTimeout(() => searchStops(q), 300);
+});
+
+async function searchStops(q) {
+  showLoading();
+  try {
+    const data = await api('GET', `/api/stops?q=${encodeURIComponent(q)}`);
+    renderStops(data);
+  } catch (e) {
+    const msg = e.message.includes('Failed to fetch') || e.message.includes('NetworkError')
+      ? 'Server nicht erreichbar – ist die API gestartet?'
+      : e.message;
+    stopResults.innerHTML = `<div class="error-state"><div class="msg">${msg}</div><button onclick="searchStops('${q}')">Erneut versuchen</button></div>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderStops(stops) {
+  if (!stops || stops.length === 0) {
+    stopResults.innerHTML = '<div class="empty-state"><span class="icon">🔍</span><p>Keine Haltestellen gefunden</p></div>';
+    return;
+  }
+  stopResults.innerHTML = stops.map(s => {
+    const typeName = s.type === 'stop' ? 'Haltestelle' : s.type || 'Ort';
+    return `<div class="card" data-id="${s.id}" data-name="${s.name}" onclick="selectStop('${s.id}','${s.name.replace(/'/g,"\\'")}')">
+      <h3>${s.name}</h3>
+      <div class="sub">${s.gid || ''} ${s.place ? '· ' + s.place : ''}</div>
+      <span class="badge">${typeName}</span>
+    </div>`;
+  }).join('');
+}
+
+// ---- Stop selection → Departures ----
+function selectStop(id, name) {
+  state.selectedStop = { id, name };
+  switchTab('departures');
+}
+
+// ---- Departures ----
+async function loadDepartures(stopId) {
+  clearInterval(state.departuresTimer);
+  showLoading();
+  try {
+    const data = await api('GET', `/api/departures/${stopId}?limit=30`);
+    renderDepartures(data);
+    state.departuresTimer = setInterval(() => loadDepartures(stopId), 30000);
+  } catch (e) {
+    document.getElementById('departures-content').innerHTML =
+      `<div class="error-state"><div class="msg">Fehler: ${e.message}</div><button onclick="loadDepartures('${stopId}')">Erneut versuchen</button></div>`;
+  } finally {
+    hideLoading();
+  }
+}
+
+function renderDepartures(data) {
+  const el = document.getElementById('departures-content');
+  if (!data || !data.stop) {
+    el.innerHTML = '<div class="empty-state"><span class="icon">🚆</span><p>Keine Abfahrten vorhanden</p></div>';
+    return;
+  }
+  const stop = data.stop;
+  const deps = data.departures || [];
+  let html = `<div class="dep-header"><h2>${stop.name}</h2><div class="sub">ID: ${stop.id} · ${stop.gid || ''}</div></div>`;
+  if (deps.length === 0) {
+    html += '<div class="empty-state" style="padding:30px 20px"><span class="icon">🚆</span><p>Keine Abfahrten in Kürze</p></div>';
+  } else {
+    html += deps.map(d => {
+      const delay = parseDelay(d.plannedTime, d.realtimeTime);
+      const planned = formatTime(d.plannedTime);
+      const realtime = formatTime(d.realtimeTime);
+      const isLate = d.delay > 0;
+      const lineCls = transportClass(d.transportType?.name);
+      return `<div class="dep-card">
+        <div class="line ${lineCls}">${d.line || '?'}</div>
+        <div class="info">
+          <div class="direction">${d.direction || d.destination || ''}</div>
+          <div class="meta">${d.transportType?.name || ''} · ${d.platform ? 'Steig ' + d.platform : ''}</div>
+        </div>
+        <div class="time">
+          ${isLate && planned ? `<div class="planned">${planned}</div>` : ''}
+          ${realtime ? `<div class="realtime">${realtime}</div>` : planned ? `<div class="ontime">${planned}</div>` : ''}
+          <div class="delay ${delay.cls}">${delay.text}</div>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  el.innerHTML = html;
+}
+
+// Back to stops
+document.getElementById('back-to-stops').addEventListener('click', () => {
+  clearInterval(state.departuresTimer);
+  state.selectedStop = null;
+  switchTab('stops');
+});
+
+// ---- Trip ----
+const tripOrigin = document.getElementById('trip-origin');
+const tripDest = document.getElementById('trip-destination');
+const originSuggestions = document.getElementById('origin-suggestions');
+const destSuggestions = document.getElementById('destination-suggestions');
+const tripForm = document.getElementById('trip-form');
+const tripResults = document.getElementById('trip-results');
+
+let tripState = { origin: null, destination: null };
+let originDebounce = null, destDebounce = null;
+
+function setupTripAutocomplete(input, suggestionsEl, stateKey, clearOther) {
+  input.addEventListener('input', () => {
+    const q = input.value.trim();
+    clearTimeout(clearOther === 'origin' ? originDebounce : destDebounce);
+    if (q.length < 2) { suggestionsEl.classList.remove('show'); suggestionsEl.innerHTML = ''; return }
+    const debounce = setTimeout(async () => {
+      try {
+        const data = await api('GET', `/api/stops?q=${encodeURIComponent(q)}`);
+        if (!data || data.length === 0) {
+          suggestionsEl.innerHTML = '<div class="suggestion" style="color:var(--text-muted);cursor:default">Keine Ergebnisse</div>';
+        } else {
+          suggestionsEl.innerHTML = data.map(s =>
+            `<div class="suggestion" data-id="${s.id}" data-name="${s.name}">
+              ${s.name}
+              <div class="sub">${s.place || ''} ${s.gid ? '· ' + s.gid : ''}</div>
+            </div>`
+          ).join('');
+          suggestionsEl.querySelectorAll('.suggestion').forEach(el => {
+            el.addEventListener('click', () => {
+              tripState[stateKey] = { id: el.dataset.id, name: el.dataset.name };
+              input.value = el.dataset.name;
+              suggestionsEl.classList.remove('show');
+              suggestionsEl.innerHTML = '';
+              if (clearOther === 'origin') document.getElementById('trip-destination').focus();
+            });
+          });
+        }
+        suggestionsEl.classList.add('show');
+      } catch { suggestionsEl.classList.remove('show') }
+    }, 300);
+    if (clearOther === 'origin') originDebounce = debounce; else destDebounce = debounce;
+  });
+
+  input.addEventListener('blur', () => setTimeout(() => { suggestionsEl.classList.remove('show') }, 200));
+  input.addEventListener('focus', () => { if (suggestionsEl.children.length > 0) suggestionsEl.classList.add('show') });
+}
+
+setupTripAutocomplete(tripOrigin, originSuggestions, 'origin', 'origin');
+setupTripAutocomplete(tripDest, destSuggestions, 'destination', 'dest');
+
+// Set default date
+const today = new Date();
+document.getElementById('trip-date').value = today.toISOString().slice(0, 10);
+
+tripForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const origin = tripState.origin;
+  const destination = tripState.destination;
+  if (!origin || !destination) {
+    tripResults.innerHTML = '<div class="error-state"><div class="msg">Bitte wähle Start- und Zielhaltestelle aus den Vorschlägen</div></div>';
+    return;
+  }
+  const dateInput = document.getElementById('trip-date').value;
+  const timeInput = document.getElementById('trip-time').value;
+  const date = dateInput ? dateInput.split('-').reverse().join('.') : '';
+  const time = timeInput || '12:00';
+
+  showLoading();
+  try {
+    const data = await api('POST', '/api/trip', {
+      origin: origin.id,
+      destination: destination.id,
+      time: time,
+      date: date
+    });
+    renderTrip(data);
+  } catch (e) {
+    tripResults.innerHTML = `<div class="error-state"><div class="msg">Fehler: ${e.message}</div></div>`;
+  } finally {
+    hideLoading();
+  }
+});
+
+const LINE_COLORS = ['#00b4d8', '#e94560', '#2ea043', '#d29922', '#9b59b6', '#e67e22', '#1abc9c', '#3498db'];
+
+function renderTrip(data) {
+  if (!data || !data.legs || data.legs.length === 0) {
+    tripResults.innerHTML = '<div class="empty-state"><span class="icon">🔄</span><p>Keine Verbindung gefunden</p></div>';
+    return;
+  }
+  const tripId = Date.now();
+  const legData = [];
+
+  let html = `<div class="section-label">Verbindung · ${data.duration} Min · ${data.transfers} Umstieg${data.transfers !== 1 ? 'e' : ''}</div>`;
+  html += `<div class="trip-result open" onclick="toggleTripDetail(${tripId})" id="trip-${tripId}">`;
+
+  data.legs.forEach((leg, i) => {
+    const color = leg.type === 'ride' ? LINE_COLORS[i % LINE_COLORS.length] : '#888';
+
+    if (leg.type === 'ride') {
+      const depTime = formatTime(leg.origin?.realtimeTime) || formatTime(leg.origin?.plannedTime) || '';
+      const arrTime = formatTime(leg.destination?.realtimeTime) || formatTime(leg.destination?.plannedTime) || '';
+      const depPlat = leg.origin?.platform ? `Steig ${leg.origin.platform}` : '';
+      const arrPlat = leg.destination?.platform ? `Steig ${leg.destination.platform}` : '';
+      const stopsCount = leg.intermediateStops?.length || 0;
+
+      const legCoords = [];
+      if (leg.origin?.lon && leg.origin?.lat) legCoords.push([leg.origin.lon, leg.origin.lat]);
+      (leg.allStops || []).forEach(s => {
+        if (s.id !== leg.origin?.id && s.id !== leg.destination?.id && s.lon && s.lat) {
+          legCoords.push([s.lon, s.lat]);
+        }
+      });
+      if (leg.destination?.lon && leg.destination?.lat) legCoords.push([leg.destination.lon, leg.destination.lat]);
+      legData.push({ coords: legCoords, color, name: leg.line?.name || '?', type: 'ride', transportType: leg.line?.transportType || '' });
+
+      html += `<div class="trip-leg">
+        <div class="dot ride" style="background:${color}"></div>
+        <div class="leg-info">
+          <div class="leg-line" style="color:${color}">${leg.line?.name || '?'} · ${leg.line?.transportType || ''}</div>
+          <div class="leg-direction">Richtung ${leg.line?.direction || ''}</div>
+          <div class="leg-times">${depTime} ${leg.origin?.name || ''}${depPlat ? ' ('+depPlat+')' : ''} → ${arrTime} ${leg.destination?.name || ''}${arrPlat ? ' ('+arrPlat+')' : ''}</div>
+          ${stopsCount > 0 ? `<div class="leg-stops">${stopsCount} Zwischenhalt${stopsCount !== 1 ? 'e' : ''}</div>` : ''}
+        </div>
+      </div>`;
+    } else {
+      const depTime = formatTime(leg.origin?.plannedTime) || '';
+      const arrTime = formatTime(leg.destination?.plannedTime) || '';
+      const legCoords = [];
+      if (leg.origin?.lon && leg.origin?.lat) legCoords.push([leg.origin.lon, leg.origin.lat]);
+      if (leg.destination?.lon && leg.destination?.lat) legCoords.push([leg.destination.lon, leg.destination.lat]);
+      legData.push({ coords: legCoords, color: '#888', name: 'Fußweg', type: 'footpath' });
+
+      html += `<div class="trip-leg" style="opacity:.6">
+        <div class="dot footpath"></div>
+        <div class="leg-info">
+          <div class="leg-line">Fußweg</div>
+          <div class="leg-times">${depTime} ${leg.origin?.name || ''} → ${arrTime} ${leg.destination?.name || ''}</div>
+        </div>
+      </div>`;
+    }
+  });
+
+  // Detail: ALL stops per line with colored border
+  html += `<div class="trip-detail" id="detail-${tripId}">`;
+  data.legs.forEach((leg, i) => {
+    if (leg.type === 'ride' && leg.allStops?.length > 0) {
+      const color = LINE_COLORS[i % LINE_COLORS.length];
+
+      // Filter out origin/destination from allStops (they're shown separately)
+      const midStops = (leg.allStops || []).filter(s => s.id !== leg.origin?.id && s.id !== leg.destination?.id);
+
+      html += `<div class="detail-stops line-section" style="border-left:3px solid ${color};padding-left:12px;margin-bottom:16px">`;
+      html += `<div class="detail-label"><span class="color-dot" style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${color};margin-right:6px"></span>${leg.line?.name || '?'} · ${leg.line?.transportType || ''} → ${leg.line?.direction || ''}</div>`;
+
+      const ot = formatTime(leg.origin?.realtimeTime) || formatTime(leg.origin?.plannedTime) || '';
+      html += `<div class="detail-stop"><div class="dot dep" style="background:${color}"></div><span class="time">${ot}</span><strong>${leg.origin?.name || ''}</strong>${leg.origin?.platform ? ' · Steig '+leg.origin.platform : ''}</div>`;
+
+      midStops.forEach(s => {
+        const t = formatTime(s.realtimeTime) || formatTime(s.plannedTime) || '';
+        const plat = s.platform ? `· Steig ${s.platform}` : '';
+        html += `<div class="detail-stop"><div class="dot pass" style="background:${color}"></div><span class="time">${t}</span> ${s.name} <span class="plat">${plat}</span></div>`;
+      });
+
+      const at = formatTime(leg.destination?.realtimeTime) || formatTime(leg.destination?.plannedTime) || '';
+      html += `<div class="detail-stop"><div class="dot arr" style="background:${color}"></div><span class="time">${at}</span><strong>${leg.destination?.name || ''}</strong>${leg.destination?.platform ? ' · Steig '+leg.destination.platform : ''}</div>`;
+
+      html += '</div>';
+    }
+  });
+
+  html += `<div class="map-wrap"><div id="map-${tripId}" style="height:300px"></div></div>`;
+  html += `</div></div>`;
+
+  tripResults.innerHTML = html;
+  window._tripLegData = window._tripLegData || {};
+  window._tripLegData[tripId] = legData;
+
+  setTimeout(() => initTripMap(tripId), 200);
+}
+
+function toggleTripDetail(id) {
+  const el = document.getElementById(`trip-${id}`);
+  const detail = document.getElementById(`detail-${id}`);
+  if (!detail) return;
+  const isOpen = !detail.classList.contains('hidden');
+  detail.classList.toggle('hidden');
+  el.classList.toggle('open');
+  if (!isOpen) setTimeout(() => initTripMap(id), 150);
+}
+
+async function initTripMap(id) {
+  const el = document.getElementById(`map-${id}`);
+  if (!el || el._leaflet_initialized) return;
+  const legs = window._tripLegData?.[id];
+  if (!legs || legs.length === 0) return;
+  el._leaflet_initialized = true;
+
+  // Find first valid coord for center
+  let center = [54.08, 12.13];
+  for (const leg of legs) {
+    if (leg.coords?.length > 0) { center = [leg.coords[0][1], leg.coords[0][0]]; break }
+  }
+
+  const map = L.map(el, { zoomControl: false }).setView(center, 13);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap-Mitwirkende',
+    maxZoom: 19,
+  }).addTo(map);
+  L.control.zoom({ position: 'topright' }).addTo(map);
+
+  const allLatLngs = [];
+
+  // Fetch OSRM routes for ride legs in parallel
+  const osrmPromises = legs.map((leg, idx) => {
+    if (leg.type !== 'ride' || leg.coords.length < 2) return null;
+    const coordsStr = leg.coords.map(c => c.join(',')).join(';');
+    return fetch(`https://router.project-osrm.org/route/v1/driving/${coordsStr}?geometries=geojson&overview=full&alternatives=false`)
+      .then(r => { if (!r.ok) throw new Error('OSRM error'); return r.json() })
+      .then(d => {
+        if (d.code !== 'Ok' || !d.routes?.[0]?.geometry?.coordinates) throw new Error('No route');
+        return { idx, geometry: d.routes[0].geometry.coordinates };
+      })
+      .catch(() => null);
+  });
+
+  const osrmResults = await Promise.all(osrmPromises);
+
+  // Draw each leg
+  legs.forEach((leg, idx) => {
+    const osrm = osrmResults[idx];
+    let latlngs;
+
+    if (osrm && osrm.geometry) {
+      latlngs = osrm.geometry.map(c => [c[1], c[0]]);
+    } else {
+      latlngs = leg.coords.map(c => [c[1], c[0]]);
+    }
+
+    allLatLngs.push(...latlngs);
+
+    if (leg.type === 'ride') {
+      L.polyline(latlngs, {
+        color: leg.color, weight: 4, opacity: 0.85
+      }).addTo(map);
+    } else {
+      L.polyline(latlngs, {
+        color: leg.color, weight: 2, opacity: 0.5, dashArray: '6,6'
+      }).addTo(map);
+    }
+
+    // Markers: start + end (same as before)
+    if (latlngs.length > 0 && idx === legs.findIndex(l => l.type === 'ride')) {
+      // first ride leg's start
+    }
+    if (latlngs.length > 0) {
+      const isFirstLeg = idx === 0;
+      const isLastLeg = idx === legs.length - 1;
+      if (isFirstLeg) {
+        L.marker(latlngs[0]).addTo(map).bindPopup(`<b>Start</b><br>${leg.name}`);
+      }
+      if (isLastLeg) {
+        L.marker(latlngs[latlngs.length - 1]).addTo(map).bindPopup(`<b>Ziel</b><br>${leg.name}`);
+      }
+    }
+
+    // Intermediate stop dots
+    if (leg.type === 'ride' && latlngs.length > 2) {
+      for (let i = 1; i < latlngs.length - 1; i++) {
+        L.circleMarker(latlngs[i], {
+          radius: 4, color: leg.color, fillColor: '#fff', fillOpacity: 1, weight: 2
+        }).addTo(map);
+      }
+    }
+  });
+
+  if (allLatLngs.length > 1) {
+    map.fitBounds(allLatLngs, { padding: [40, 40] });
+  }
+}
+
+// ---- Init ----
+// Show hint to search for stops
+document.addEventListener('DOMContentLoaded', () => {
+  stopSearch.focus();
+});
+</script>
+</body>
+</html>
