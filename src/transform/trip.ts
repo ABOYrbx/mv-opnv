@@ -113,10 +113,12 @@ export function transformTripRequest(data: unknown): TripResponse {
     const isFootpath = !mode && !!leg.footpath && leg.footpath.length > 0;
 
     if (isFootpath) {
+      const fpDuration = leg.footpath?.[0]?.duration;
       legs.push({
         type: 'footpath',
         origin: toStop(dep),
         destination: toStop(arr),
+        walkingDuration: fpDuration ? parseInt(fpDuration, 10) : undefined,
       });
     } else if (mode) {
       rideCount++;

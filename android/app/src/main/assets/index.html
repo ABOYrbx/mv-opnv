@@ -218,15 +218,23 @@ const state = {
 function showLoading() { document.getElementById('loading').classList.remove('hidden') }
 function hideLoading() { document.getElementById('loading').classList.add('hidden') }
 
+function normalizeEfaDate(s) {
+  if (!s || !/^\d{2}-\d{2}-\d{4}/.test(s)) return s;
+  const [d, m, y] = s.split('T')[0].split('-');
+  return `${y}-${m}-${d}T${s.split('T')[1] || ''}`;
+}
+
 function formatTime(isoStr) {
   if (!isoStr) return null;
-  try { const d = new Date(isoStr); if (isNaN(d.getTime())) return null; return d.toTimeString().slice(0, 5) } catch { return null }
+  try { const d = new Date(normalizeEfaDate(isoStr)); if (isNaN(d.getTime())) return null; return d.toTimeString().slice(0, 5) } catch { return null }
 }
 
 function parseDelay(planned, realtime) {
   if (!planned || !realtime) return { text: '–', cls: 'on-time' };
-  const p = planned.split('T')[1]?.split(':').slice(0,2).join(':');
-  const r = realtime.split('T')[1]?.split(':').slice(0,2).join(':');
+  const np = normalizeEfaDate(planned);
+  const nr = normalizeEfaDate(realtime);
+  const p = np.split('T')[1]?.split(':').slice(0,2).join(':');
+  const r = nr.split('T')[1]?.split(':').slice(0,2).join(':');
   if (!p || !r) return { text: '–', cls: 'on-time' };
   const pMin = parseInt(p.split(':')[0],10)*60 + parseInt(p.split(':')[1],10);
   const rMin = parseInt(r.split(':')[0],10)*60 + parseInt(r.split(':')[1],10);
@@ -520,7 +528,7 @@ function renderTrip(data) {
       const waypoints = [], stopMarkers = [];
       if (leg.origin?.lon && leg.origin?.lat) {
         waypoints.push([leg.origin.lon, leg.origin.lat]);
-        stopMarkers.push({ lat: leg.origin.lat, lon: leg.origin.lon, label: leg.origin.name, type: 'origin' });
+        stopMarkers.push({ lat: leg.origin.lat, lon: leg.origin.lon, label: leg.origin.name, type: 'origin', time: formatTime(leg.origin?.realtimeTime) || formatTime(leg.origin?.plannedTime) || '' });
       }
       const allStops = leg.allStops || [];
       const oId = leg.origin?.id, dId = leg.destination?.id;
@@ -531,25 +539,32 @@ function renderTrip(data) {
         if (oIdx !== -1 && dIdx !== -1) midStops = oIdx < dIdx ? allStops.slice(oIdx+1, dIdx) : allStops.slice(dIdx+1, oIdx).reverse();
       }
       if (!midStops.length) midStops = leg.intermediateStops || [];
-      midStops.forEach(s => { if (s.lon && s.lat) { waypoints.push([s.lon, s.lat]); stopMarkers.push({ lat: s.lat, lon: s.lon, label: s.name, type: 'stop' }) } });
+      midStops.forEach(s => { if (s.lon && s.lat) { waypoints.push([s.lon, s.lat]); stopMarkers.push({ lat: s.lat, lon: s.lon, label: s.name, type: 'stop', time: formatTime(s.realtimeTime)||formatTime(s.plannedTime)||'' }) } });
       if (leg.destination?.lon && leg.destination?.lat) {
         waypoints.push([leg.destination.lon, leg.destination.lat]);
-        stopMarkers.push({ lat: leg.destination.lat, lon: leg.destination.lon, label: leg.destination.name, type: 'destination' });
+        stopMarkers.push({ lat: leg.destination.lat, lon: leg.destination.lon, label: leg.destination.name, type: 'destination', time: formatTime(leg.destination?.realtimeTime) || formatTime(leg.destination?.plannedTime) || '' });
       }
       legData.push({ coords: waypoints, stopMarkers, name: leg.line?.name || '?', color: lineColor });
 
+      const delayInfo = (() => {
+        const d = parseDelay(leg.origin?.plannedTime, leg.origin?.realtimeTime);
+        const delayClass = d.cls === 'very-late' ? 'var(--danger)' : d.cls === 'late' ? 'var(--warning)' : 'var(--success)';
+        return d.text !== '–' ? `<span style="font-size:.7rem;color:${delayClass};font-weight:600">${d.text}</span>` : '';
+      })();
       html += `<div class="trip-leg">
         <div class="dot ride" style="background:${lineColor}"></div>
         <div class="leg-info">
           <div class="leg-line" style="color:${lineColor}">${leg.line?.name || '?'} · ${leg.line?.transportType || ''}</div>
           <div class="leg-direction">Richtung ${leg.line?.direction || ''}</div>
           <div class="leg-times">${depTime} ${leg.origin?.name || ''}${depPlat ? ' ('+depPlat+')' : ''} → ${arrTime} ${leg.destination?.name || ''}${arrPlat ? ' ('+arrPlat+')' : ''}</div>
+          ${delayInfo ? `<div style="margin-top:2px">${delayInfo}</div>` : ''}
           ${stopsCount > 0 ? `<div class="leg-stops">${stopsCount} Zwischenhalt${stopsCount!==1 ? 'e' : ''}</div>` : ''}
         </div>
       </div>`;
     } else {
       const depTime = formatTime(leg.origin?.plannedTime) || '';
       const arrTime = formatTime(leg.destination?.plannedTime) || '';
+      const walkingMin = leg.walkingDuration ? Math.round(leg.walkingDuration / 60) : 0;
       const lc = [];
       if (leg.origin?.lon && leg.origin?.lat) lc.push([leg.origin.lon, leg.origin.lat]);
       if (leg.destination?.lon && leg.destination?.lat) lc.push([leg.destination.lon, leg.destination.lat]);
@@ -557,7 +572,7 @@ function renderTrip(data) {
       html += `<div class="trip-leg" style="opacity:.5">
         <div class="dot footpath"></div>
         <div class="leg-info">
-          <div class="leg-line">Fußweg</div>
+          <div class="leg-line">Fußweg ${walkingMin ? `· ${walkingMin} Min` : ''}</div>
           <div class="leg-times">${depTime} ${leg.origin?.name || ''} → ${arrTime} ${leg.destination?.name || ''}</div>
         </div>
       </div>`;
@@ -651,7 +666,7 @@ async function drawTripOnMap(legData) {
 
         if (isStart || isEnd) {
           const marker = L.marker([sm.lat, sm.lon]).addTo(map);
-          marker.bindPopup(`<b>${isStart ? 'Start' : 'Ziel'}</b><br>${sm.label}`);
+          marker.bindPopup(`<b>${isStart ? 'Start' : 'Ziel'}</b><br>${sm.label}${sm.time ? '<br>' + sm.time : ''}`);
           routeLayers.push(marker);
           if (isStart) state.originMarker = marker;
           if (isEnd) state.destMarker = marker;
@@ -659,7 +674,7 @@ async function drawTripOnMap(legData) {
           const circle = L.circleMarker([sm.lat, sm.lon], {
             radius: 6, color, fillColor: '#fff', fillOpacity: 1, weight: 2.5
           }).addTo(map);
-          circle.bindPopup(sm.label);
+          circle.bindPopup(`${sm.label}${sm.time ? '<br>' + sm.time : ''}`);
           routeLayers.push(circle);
         }
       });

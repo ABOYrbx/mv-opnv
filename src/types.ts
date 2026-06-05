@@ -42,6 +42,7 @@ export interface TripLeg {
   line?: TripLine;
   intermediateStops?: TripStop[];
   allStops?: TripStop[];
+  walkingDuration?: number;
 }
 
 export interface TripStop {
